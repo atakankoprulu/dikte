@@ -1,0 +1,70 @@
+{
+  "name": "dikte",
+  "version": "0.1.0",
+  "description": "Videoyu sürükle, dili seç, zaman damgalı altyazı (SRT) al. Tamamen yerel — Whisper (whisper.cpp) ile.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --mac dmg --arm64"
+  },
+  "author": "Atakan Köprülü",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/atakankoprulu/dikte.git"
+  },
+  "build": {
+    "appId": "com.atakankoprulu.dikte",
+    "productName": "Dikte",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "category": "public.app-category.video",
+      "identity": "-",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "hardenedRuntime": false
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "mp4",
+          "mov",
+          "m4v",
+          "mkv",
+          "webm",
+          "avi",
+          "mp3",
+          "m4a",
+          "wav"
+        ],
+        "name": "Video veya ses",
+        "role": "Viewer",
+        "rank": "Alternate"
+      }
+    ],
+    "dmg": {
+      "title": "Dikte ${version}",
+      "artifactName": "Dikte-${version}-arm64.${ext}"
+    }
+  }
+}

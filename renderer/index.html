@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; media-src 'self' file:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'" />
+  <title>Dikte</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="titlebar">
+    <div class="brand">Dikte</div>
+    <div class="langs" role="radiogroup" aria-label="Konuşma dili">
+      <button class="lang" data-lang="tr" role="radio">Türkçe</button>
+      <button class="lang" data-lang="en" role="radio">English</button>
+      <button class="lang" data-lang="es" role="radio">Español</button>
+    </div>
+    <div class="badge" title="Her şey bu bilgisayarda çalışır, hiçbir şey internete gönderilmez">
+      <span class="dot"></span>Yerel · Whisper turbo
+    </div>
+  </header>
+
+  <!-- Kurulum -->
+  <section id="setup" class="screen hidden">
+    <div class="card">
+      <h1>Bir kerelik kurulum</h1>
+      <ul class="checks">
+        <li id="chk-ffmpeg"><span class="mark"></span>ffmpeg <code>brew install ffmpeg</code></li>
+        <li id="chk-whisper"><span class="mark"></span>whisper.cpp <code>brew install whisper.cpp</code></li>
+        <li id="chk-model"><span class="mark"></span>Whisper modeli (~550 MB)</li>
+      </ul>
+      <div id="model-dl" class="hidden">
+        <div class="bar"><div id="model-bar"></div></div>
+        <div id="model-text" class="muted small"></div>
+      </div>
+      <div class="row">
+        <button id="btn-download" class="primary hidden">Modeli indir</button>
+        <button id="btn-recheck">Tekrar kontrol et</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Boş -->
+  <section id="empty" class="screen hidden">
+    <div id="drop" class="drop">
+      <div class="drop-icon" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="48" height="48"><rect x="6" y="10" width="36" height="28" rx="5" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M14 30h12M14 24h20" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+      </div>
+      <div class="drop-title">Videoyu buraya bırak</div>
+      <div class="muted">ya da <button id="btn-pick" class="link">dosya seç</button> · seçili dil: <b id="empty-lang"></b></div>
+    </div>
+  </section>
+
+  <!-- Çalışma -->
+  <section id="work" class="screen hidden">
+    <div class="pane left">
+      <div class="player">
+        <video id="video" controls playsinline></video>
+        <div id="overlay" class="overlay"></div>
+      </div>
+      <div class="file-row">
+        <div id="file-name" class="file-name"></div>
+        <button id="btn-new" class="ghost">Yeni video</button>
+      </div>
+      <div id="status" class="status hidden">
+        <div class="status-top">
+          <span id="status-text"></span>
+          <button id="btn-cancel" class="ghost small">İptal</button>
+        </div>
+        <div class="bar"><div id="status-bar"></div></div>
+      </div>
+      <div id="relang" class="relang hidden">
+        Dil değişti. <button id="btn-relang" class="link"></button>
+      </div>
+      <div id="error" class="error hidden"></div>
+    </div>
+
+    <div class="pane right">
+      <div class="pane-head">
+        <span>Altyazı</span>
+        <span id="seg-count" class="muted small"></span>
+      </div>
+      <div id="segments" class="segments"></div>
+      <div class="pane-foot">
+        <button id="btn-copy" class="ghost" disabled>Metni kopyala</button>
+        <button id="btn-txt" class="ghost" disabled>TXT</button>
+        <button id="btn-srt" class="primary" disabled>SRT kaydet</button>
+      </div>
+      <div id="saved" class="saved hidden"></div>
+    </div>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

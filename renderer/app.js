@@ -678,6 +678,7 @@ const minPps = () => {
 };
 
 function clampView() {
+  if (!tl.w) return;
   const d = durationMs() / 1000;
   if (!tl.pps) tl.pps = Math.max(minPps(), tl.w / 20); // ilk açılışta ~20 sn göster
   tl.pps = clamp(tl.pps, minPps(), 800);
@@ -745,6 +746,9 @@ function drawTimeline() {
   const H = tl.h;
   ctx.clearRect(0, 0, W, H);
   if (!W || !state.wave) return;
+  // Yeni dosyada pps sıfırlanır; ölçek kurulmadan çizersek cetvel döngüsü sonsuza gider (donma).
+  if (!(tl.pps > 0) || !Number.isFinite(tl.pps)) clampView();
+  if (!(tl.pps > 0) || !Number.isFinite(tl.pps)) return;
 
   // cetvel
   const step = tickStep();
@@ -756,7 +760,8 @@ function drawTimeline() {
   ctx.beginPath();
   ctx.moveTo(0, RULER + 0.5);
   ctx.lineTo(W, RULER + 0.5);
-  for (let t = Math.floor(tl.view / step) * step; t <= tl.view + visibleSec(); t += step) {
+  const tEnd = tl.view + visibleSec();
+  for (let t = Math.floor(tl.view / step) * step, n = 0; t <= tEnd && n < 500; t += step, n++) {
     const x = Math.round((t - tl.view) * tl.pps) + 0.5;
     ctx.moveTo(x, RULER - 5);
     ctx.lineTo(x, RULER);

@@ -13,5 +13,6 @@ contextBridge.exposeInMainWorld('dikte', {
   onStage: (cb) => ipcRenderer.on('transcribe:stage', (_e, d) => cb(d)),
   takePending: () => ipcRenderer.invoke('pending:take'),
   onOpenPath: (cb) => ipcRenderer.on('open-path', (_e, p) => cb(p)),
+  onEdit: (cb) => ipcRenderer.on('edit', (_e, what) => cb(what)),
   onModelProgress: (cb) => ipcRenderer.on('model:progress', (_e, d) => cb(d)),
 });

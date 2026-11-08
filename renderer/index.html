@@ -27,7 +27,7 @@
       <ul class="checks">
         <li id="chk-ffmpeg"><span class="mark"></span>ffmpeg <code>brew install ffmpeg</code></li>
         <li id="chk-whisper"><span class="mark"></span>whisper.cpp <code>brew install whisper.cpp</code></li>
-        <li id="chk-model"><span class="mark"></span>Whisper modeli (~550 MB)</li>
+        <li id="chk-model"><span class="mark"></span>Whisper modeli + konuşma algılama (~550 MB)</li>
       </ul>
       <div id="model-dl" class="hidden">
         <div class="bar"><div id="model-bar"></div></div>
@@ -55,13 +55,20 @@
   <section id="work" class="screen hidden">
     <div class="pane left">
       <div class="player">
-        <video id="video" controls playsinline></video>
+        <video id="video" playsinline></video>
         <div id="overlay" class="overlay"></div>
       </div>
-      <div class="file-row">
-        <div id="file-name" class="file-name"></div>
+
+      <div class="transport">
+        <button id="btn-play" class="ghost icon-btn" title="Oynat / durdur (Boşluk)">
+          <svg id="ico-play" viewBox="0 0 16 16" width="14" height="14"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>
+          <svg id="ico-pause" class="hidden" viewBox="0 0 16 16" width="14" height="14"><path d="M4 2.5h3v11H4zM9 2.5h3v11H9z" fill="currentColor"/></svg>
+        </button>
+        <span id="clock" class="clock">0:00.000</span>
+        <span class="file-name" id="file-name"></span>
         <button id="btn-new" class="ghost">Yeni video</button>
       </div>
+
       <div id="status" class="status hidden">
         <div class="status-top">
           <span id="status-text"></span>
@@ -73,6 +80,39 @@
         Dil değişti. <button id="btn-relang" class="link"></button>
       </div>
       <div id="error" class="error hidden"></div>
+
+      <div id="editor" class="editor">
+        <div class="toolbar">
+          <div class="group">
+            <button id="btn-undo" class="ghost small" title="Geri al (⌘Z)" disabled>Geri al</button>
+            <button id="btn-redo" class="ghost small" title="Yinele (⇧⌘Z)" disabled>Yinele</button>
+          </div>
+          <div class="group">
+            <button id="btn-split" class="ghost small" title="Seçili satırı oynatma çizgisinden böl (S)">Böl</button>
+            <button id="btn-merge" class="ghost small" title="Seçili satırı sonrakiyle birleştir (M)">Birleştir</button>
+            <button id="btn-add" class="ghost small" title="Oynatma çizgisine yeni satır ekle (N)">+ Satır</button>
+            <button id="btn-del" class="ghost small" title="Seçili satırı sil (⌘⌫)">Sil</button>
+          </div>
+          <div class="group" title="Bütün altyazıları birlikte erken/geç kaydır">
+            <span class="muted small">Tümünü kaydır</span>
+            <button id="btn-shift-m" class="ghost small">−0,1 sn</button>
+            <button id="btn-shift-p" class="ghost small">+0,1 sn</button>
+          </div>
+        </div>
+        <div class="timeline-wrap">
+          <canvas id="timeline"></canvas>
+          <div class="zoom">
+            <button id="btn-zoom-out" title="Uzaklaş (⌘ + tekerlek)">−</button>
+            <button id="btn-zoom-fit" title="Tamamını göster">Sığdır</button>
+            <button id="btn-zoom-in" title="Yakınlaş (⌘ + tekerlek)">+</button>
+          </div>
+        </div>
+        <div class="hint">
+          <kbd>Boşluk</kbd> oynat · <kbd>I</kbd> <kbd>O</kbd> seçili satırın başı / sonu = şu an ·
+          <kbd>⌥</kbd><kbd>←</kbd><kbd>→</kbd> satırı 0,1 sn kaydır · <kbd>←</kbd><kbd>→</kbd> 1 sn sar (<kbd>⇧</kbd> 0,1 sn) ·
+          <kbd>↑</kbd><kbd>↓</kbd> satır seç · <kbd>P</kbd> satırı oynat · bloğu sürükle, kenarından uzat/kısalt
+        </div>
+      </div>
     </div>
 
     <div class="pane right">

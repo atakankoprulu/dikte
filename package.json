@@ -1,6 +1,6 @@
 {
   "name": "dikte",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Videoyu sürükle, dili seç, zaman damgalı altyazı (SRT) al. Tamamen yerel — Whisper (whisper.cpp) ile.",
   "main": "main.js",
   "scripts": {

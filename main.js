@@ -1,12 +1,15 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
 const { pathToFileURL } = require('url');
 
-const MODEL_NAME = 'ggml-large-v3-turbo-q5_0.bin';
-const MODEL_URL = `https://huggingface.co/ggerganov/whisper.cpp/resolve/main/${MODEL_NAME}`;
+// Whisper modeli + konuşma algılama (VAD) modeli. VAD, altyazıların sessizliğe taşmasını engeller.
+const MODELS = [
+  { name: 'ggml-large-v3-turbo-q5_0.bin', url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin' },
+  { name: 'ggml-silero-v5.1.2.bin', url: 'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin' },
+];
 const LANGS = new Set(['tr', 'en', 'es']);
 
 // GUI'den açılan macOS uygulamaları shell PATH'ini görmez; Homebrew yollarını elle ekle.
@@ -28,8 +31,12 @@ function modelDir() {
   return path.join(app.getPath('appData'), 'Dikte', 'models');
 }
 
-function modelPath() {
-  return path.join(modelDir(), MODEL_NAME);
+function modelPath(i = 0) {
+  return path.join(modelDir(), MODELS[i].name);
+}
+
+function missingModels() {
+  return MODELS.filter((m) => !fs.existsSync(path.join(modelDir(), m.name)));
 }
 
 let win = null;
@@ -57,6 +64,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false, // pencere arkadayken oynatma/çizim durmasın
     },
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -94,6 +102,53 @@ function run(cmd, args, onStderr) {
   });
 }
 
+// 16 kHz mono 16-bit WAV'dan dalga formu tepe değerleri (saniyede `rate` adet, 0..1)
+function computePeaks(file, rate = 100) {
+  const buf = fs.readFileSync(file);
+  let off = 12;
+  let dataOff = -1;
+  let dataLen = 0;
+  while (off + 8 <= buf.length) {
+    const id = buf.toString('ascii', off, off + 4);
+    const len = buf.readUInt32LE(off + 4);
+    if (id === 'data') {
+      dataOff = off + 8;
+      dataLen = Math.min(len, buf.length - dataOff);
+      break;
+    }
+    off += 8 + len + (len & 1);
+  }
+  if (dataOff < 0) return { peaks: [], rate, duration: 0 };
+  const n = Math.floor(dataLen / 2);
+  const step = 16000 / rate;
+  const peaks = new Array(Math.ceil(n / step));
+  let max = 1;
+  for (let i = 0; i < peaks.length; i++) {
+    let m = 0;
+    const a = Math.floor(i * step);
+    const b = Math.min(n, Math.floor((i + 1) * step));
+    for (let j = a; j < b; j++) {
+      const v = Math.abs(buf.readInt16LE(dataOff + j * 2));
+      if (v > m) m = v;
+    }
+    peaks[i] = m;
+    if (m > max) max = m;
+  }
+  return { peaks: peaks.map((v) => Math.round((v / max) * 1000) / 1000), rate, duration: n / 16000 };
+}
+
+// Whisper bitişleri son hecenin biraz önünde keser; altyazıyı biraz uzat (sonrakine çakışmadan),
+// çok kısa satırlara da okunabilecek kadar süre ver.
+function polishTiming(segs, durationMs) {
+  segs.forEach((s, i) => {
+    const next = segs[i + 1];
+    const limit = next ? next.start - 40 : durationMs;
+    s.end = Math.max(s.end, Math.min(s.end + 200, limit));
+    if (s.end - s.start < 700) s.end = Math.max(s.end, Math.min(s.start + 700, limit));
+  });
+  return segs;
+}
+
 function parseSrt(text) {
   const toMs = (t) => {
     const m = t.trim().match(/(\d+):(\d+):(\d+)[,.](\d+)/);
@@ -115,30 +170,33 @@ function parseSrt(text) {
 ipcMain.handle('setup:check', () => ({
   ffmpeg: !!findBinary('ffmpeg'),
   whisper: !!findBinary('whisper-cli'),
-  model: fs.existsSync(modelPath()),
+  model: missingModels().length === 0,
 }));
 
 ipcMain.handle('model:download', async () => {
   fs.mkdirSync(modelDir(), { recursive: true });
-  const tmp = modelPath() + '.part';
-  const res = await fetch(MODEL_URL);
-  if (!res.ok || !res.body) throw new Error(`Model indirilemedi (HTTP ${res.status})`);
-  const total = Number(res.headers.get('content-length')) || 0;
-  const out = fs.createWriteStream(tmp);
-  let got = 0;
-  let lastSent = 0;
-  for await (const chunk of res.body) {
-    got += chunk.length;
-    if (!out.write(chunk)) await new Promise((r) => out.once('drain', r));
-    const now = Date.now();
-    if (now - lastSent > 150) {
-      lastSent = now;
-      send('model:progress', { got, total });
+  for (const m of missingModels()) {
+    const dest = path.join(modelDir(), m.name);
+    const tmp = dest + '.part';
+    const res = await fetch(m.url);
+    if (!res.ok || !res.body) throw new Error(`${m.name} indirilemedi (HTTP ${res.status})`);
+    const total = Number(res.headers.get('content-length')) || 0;
+    const out = fs.createWriteStream(tmp);
+    let got = 0;
+    let lastSent = 0;
+    for await (const chunk of res.body) {
+      got += chunk.length;
+      if (!out.write(chunk)) await new Promise((r) => out.once('drain', r));
+      const now = Date.now();
+      if (now - lastSent > 150) {
+        lastSent = now;
+        send('model:progress', { got, total });
+      }
     }
+    await new Promise((r) => out.end(r));
+    fs.renameSync(tmp, dest);
+    send('model:progress', { got: total, total });
   }
-  await new Promise((r) => out.end(r));
-  fs.renameSync(tmp, modelPath());
-  send('model:progress', { got: total, total });
   return true;
 });
 
@@ -159,7 +217,7 @@ ipcMain.handle('transcribe', async (_e, { file, lang }) => {
   const ffmpeg = findBinary('ffmpeg');
   const whisper = findBinary('whisper-cli');
   if (!ffmpeg || !whisper) throw new Error('ffmpeg veya whisper-cli bulunamadı');
-  if (!fs.existsSync(modelPath())) throw new Error('Model yok');
+  if (missingModels().length) throw new Error('Model yok');
 
   cancelled = false;
   const work = fs.mkdtempSync(path.join(os.tmpdir(), 'dikte-'));
@@ -174,7 +232,8 @@ ipcMain.handle('transcribe', async (_e, { file, lang }) => {
     const threads = Math.max(2, Math.min(8, os.cpus().length));
     await run(
       whisper,
-      ['-m', modelPath(), '-f', wav, '-l', lang, '-t', String(threads), '-osrt', '-of', outBase, '-ml', '42', '-sow', '-pp'],
+      ['-m', modelPath(0), '-f', wav, '-l', lang, '-t', String(threads), '-osrt', '-of', outBase, '-ml', '42', '-sow', '-pp',
+        '--vad', '-vm', modelPath(1)],
       (chunk) => {
         const matches = [...chunk.matchAll(/progress\s*=\s*(\d+)%/g)];
         if (matches.length) send('transcribe:stage', { stage: 'whisper', progress: +matches.at(-1)[1] });
@@ -182,7 +241,8 @@ ipcMain.handle('transcribe', async (_e, { file, lang }) => {
     );
 
     const srt = fs.readFileSync(outBase + '.srt', 'utf8');
-    return parseSrt(srt);
+    const wave = computePeaks(wav);
+    return { segments: polishTiming(parseSrt(srt), wave.duration * 1000), wave };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }
@@ -207,7 +267,35 @@ ipcMain.handle('export:save', async (_e, { videoPath, ext, content }) => {
 
 ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
 
-app.whenReady().then(createWindow);
+function buildMenu() {
+  const template = [
+    { role: 'appMenu' },
+    {
+      label: 'Düzen',
+      submenu: [
+        // Geri al/yinele renderer'a gider: yazı alanındaysa metni, değilse altyazı zamanlamasını geri alır
+        { label: 'Geri Al', accelerator: 'CmdOrCtrl+Z', click: () => send('edit', 'undo') },
+        { label: 'Yinele', accelerator: 'Shift+CmdOrCtrl+Z', click: () => send('edit', 'redo') },
+        { type: 'separator' },
+        { role: 'cut', label: 'Kes' },
+        { role: 'copy', label: 'Kopyala' },
+        { role: 'paste', label: 'Yapıştır' },
+        { role: 'selectAll', label: 'Tümünü Seç' },
+      ],
+    },
+    {
+      label: 'Görünüm',
+      submenu: [{ role: 'togglefullscreen', label: 'Tam Ekran' }, ...(app.isPackaged ? [] : [{ role: 'toggleDevTools' }])],
+    },
+    { role: 'windowMenu', label: 'Pencere' },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+app.whenReady().then(() => {
+  buildMenu();
+  createWindow();
+});
 app.on('window-all-closed', () => app.quit());
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
